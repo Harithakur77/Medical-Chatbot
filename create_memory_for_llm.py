@@ -1,7 +1,10 @@
 print("Script started")
 from langchain_community.document_loaders import PyPDFLoader, DirectoryLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_community.vectorstores import FAISS 
+from dotenv import load_dotenv
+load_dotenv()
 # step :Load raw PDF(s)
 
 DATA_PATH="data/"
@@ -26,4 +29,17 @@ def create_chunks(extracted_data):
     return text_chunks
 
 text_chunks = create_chunks(extracted_data=documents)
-print("length of text chunks:",len(text_chunks))
+#print("length of text chunks:",len(text_chunks))
+
+#Step 3: create vector embeddings
+
+def get_embedding_model():
+    embedding_model=HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+    return embedding_model
+
+embedding_model=get_embedding_model()
+
+#step 4: Store embeddings in FAISS
+DB_FAISS_PATH="vectorstore/db_faiss"
+db=FAISS.from_documents(text_chunks,embedding_model)
+db.save_local(DB_FAISS_PATH)
