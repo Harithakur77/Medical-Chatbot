@@ -1,36 +1,37 @@
 import os
-from langchain_huggingface import HuggingFaceEndpoint, ChatHuggingFace, HuggingFaceEmbeddings
+from dotenv import load_dotenv
+from langchain_groq import ChatGroq
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_core.prompts import PromptTemplate
 from langchain_classic.chains import RetrievalQA
 from langchain_community.vectorstores import FAISS
 
+load_dotenv()
 
 # Step 1: LLM
-HF_TOKEN = os.getenv("HF_TOKEN")
-#HUGGINGFACE_REPO_ID = "meta-llama/Llama-3.1-8B-Instruct"   # gated: accept the license on its HF page first
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-20b")
 
-HUGGINGFACE_REPO_ID = "openai/gpt-oss-20b"
+if not GROQ_API_KEY:
+    raise SystemExit("GROQ_API_KEY is not set. Check your .env file.")
 
-def load_llm(repo_id):
-    endpoint = HuggingFaceEndpoint(
-        repo_id=repo_id,
-        task="conversational",
-        provider="groq",          # if this fails, try "together" or "cerebras"
+def load_llm():
+    return ChatGroq(
+        model=GROQ_MODEL,
         temperature=0.5,
-        max_new_tokens=512,
-        huggingfacehub_api_token=HF_TOKEN,
+        max_tokens=1024,
+        groq_api_key=GROQ_API_KEY,
     )
-    return ChatHuggingFace(llm=endpoint)
 
 # Step 2: Prompt
 CUSTOM_PROMPT_TEMPLATE = """Use the following pieces of context to answer the question at the end.
-If you don't know the answer, just say that you don't know. Don't make up an answer.
-Don't provide any explanations, just answer based on the context below.
+Give a clear, detailed answer in several sentences or bullet points, covering definition, causes, types, symptoms and treatment if they appear in the context.
+If the context doesn't contain the answer, just say that you don't know. Don't make up an answer.
 
 Context: {context}
 Question: {question}
 
-Start the answer below:
+Detailed answer:
 """
 
 def set_custom_prompt_template():
@@ -46,7 +47,7 @@ db = FAISS.load_local(DB_FAISS_PATH, embedding_model, allow_dangerous_deserializ
 
 # Step 4: QA chain
 qa_chain = RetrievalQA.from_chain_type(
-    llm=load_llm(HUGGINGFACE_REPO_ID),
+    llm=load_llm(),
     chain_type="stuff",
     retriever=db.as_retriever(search_kwargs={"k": 3}),
     return_source_documents=True,
@@ -58,4 +59,5 @@ response = qa_chain.invoke({"query": user_query})
 print("Answer:", response["result"])
 print("\nSources:")
 for d in response["source_documents"]:
-    print(f"- {d.metadata['source']}, page {d.metadata['page_label']}")
+    page = d.metadata.get("page_label", d.metadata.get("page", "?"))
+    print(f"- {d.metadata.get('source', 'unknown')}, page {page}")
